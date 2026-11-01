@@ -218,14 +218,14 @@ class Rechnungstransfer_Settings {
 	}
 
 	/**
-	 * NHZ-Symbol (assets/icon.ico) als Browser-Tab-Symbol auf der Plugin-Seite.
+	 * NHZ-Symbol (assets/nhz-icon.svg) als Browser-Tab-Symbol auf der Plugin-Seite.
 	 */
 	public static function favicon() {
 		// Menü-Symbol (40 px für scharfe Darstellung) auf 20 px begrenzen, auf allen Admin-Seiten.
-		echo '<style>#toplevel_page_' . esc_attr( self::PAGE ) . ' .wp-menu-image img{width:20px;height:20px;padding-top:7px;opacity:1;border-radius:3px}</style>' . "\n";
+		echo '<style>#toplevel_page_' . esc_attr( self::PAGE ) . ' .wp-menu-image img{width:20px;height:20px;padding-top:7px;opacity:1;border-radius:3px;object-fit:contain}</style>' . "\n";
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( $screen && false !== strpos( (string) $screen->id, self::PAGE ) && file_exists( RECHNUNGSTRANSFER_DIR . 'assets/icon.ico' ) ) {
-			printf( '<link rel="icon" href="%s">' . "\n", esc_url( RECHNUNGSTRANSFER_URL . 'assets/icon.ico?ver=' . RECHNUNGSTRANSFER_VERSION ) );
+		if ( $screen && false !== strpos( (string) $screen->id, self::PAGE ) && file_exists( RECHNUNGSTRANSFER_DIR . 'assets/nhz-icon.svg' ) ) {
+			printf( '<link rel="icon" href="%s">' . "\n", esc_url( RECHNUNGSTRANSFER_URL . 'assets/nhz-icon.svg?ver=' . RECHNUNGSTRANSFER_VERSION ) );
 		}
 	}
 

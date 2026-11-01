@@ -1,5 +1,7 @@
 # NHZ Rechnungstransfer
 
+![NHZ Systems – Neu gedacht. Einfach gemacht.](assets/brand/nhz-systems-logo-slogan-2026.png)
+
 WordPress-Plugin, das ein IMAP-Postfach im Hintergrund abruft und E-Mails mit
 Rechnungsanhang automatisch an eine Import-Adresse weiterleitet, z. B. an die
 E-Mail-Adresse für den Belegimport von **Lexware Office**.
