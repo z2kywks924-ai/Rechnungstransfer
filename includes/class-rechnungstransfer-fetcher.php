@@ -295,7 +295,7 @@ class Rechnungstransfer_Fetcher {
 		$body = implode(
 			"\n",
 			array(
-				__( 'Automatisch weitergeleitet durch das WordPress-Plugin Rechnungstransfer.', 'rechnungstransfer' ),
+				__( 'Automatisch weitergeleitet durch das WordPress-Plugin NHZ Rechnungstransfer.', 'rechnungstransfer' ),
 				'',
 				__( 'Absender', 'rechnungstransfer' ) . ': ' . $mail['from'],
 				__( 'Datum', 'rechnungstransfer' ) . ': ' . $mail['date'],

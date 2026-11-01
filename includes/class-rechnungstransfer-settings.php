@@ -56,6 +56,7 @@ class Rechnungstransfer_Settings {
 		foreach ( array( 'test', 'run', 'reset', 'clear_log', 'smtp_test' ) as $action ) {
 			add_action( 'admin_post_rechnungstransfer_' . $action, array( __CLASS__, 'handle_' . $action ) );
 		}
+		add_filter( 'admin_footer_text', array( __CLASS__, 'footer_text' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( RECHNUNGSTRANSFER_FILE ), array( __CLASS__, 'action_links' ) );
 	}
 
@@ -152,17 +153,75 @@ class Rechnungstransfer_Settings {
 	}
 
 	public static function page_url( $args = array() ) {
-		return add_query_arg( array_merge( array( 'page' => self::PAGE ), $args ), admin_url( 'options-general.php' ) );
+		return add_query_arg( array_merge( array( 'page' => self::PAGE ), $args ), admin_url( 'admin.php' ) );
 	}
 
 	public static function add_page() {
-		add_options_page(
-			__( 'Rechnungstransfer', 'rechnungstransfer' ),
-			__( 'Rechnungstransfer', 'rechnungstransfer' ),
+		add_menu_page(
+			RECHNUNGSTRANSFER_NAME,
+			RECHNUNGSTRANSFER_NAME,
 			'manage_options',
 			self::PAGE,
-			array( __CLASS__, 'render_page' )
+			array( __CLASS__, 'render_page' ),
+			self::menu_icon(),
+			81
 		);
+	}
+
+	/**
+	 * Logo-Datei im Ordner assets/ (logo.svg, logo.png oder logo.jpg).
+	 *
+	 * @return string URL oder leer, wenn kein Logo hinterlegt ist.
+	 */
+	public static function logo_url() {
+		foreach ( array( 'logo.svg', 'logo.png', 'logo.jpg' ) as $file ) {
+			if ( file_exists( RECHNUNGSTRANSFER_DIR . 'assets/' . $file ) ) {
+				return RECHNUNGSTRANSFER_URL . 'assets/' . $file . '?ver=' . RECHNUNGSTRANSFER_VERSION;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Menü-Symbol: eigenes assets/menu-icon.svg (einfarbig), sonst Dashicon.
+	 */
+	private static function menu_icon() {
+		$icon = RECHNUNGSTRANSFER_DIR . 'assets/menu-icon.svg';
+		if ( file_exists( $icon ) ) {
+			return 'data:image/svg+xml;base64,' . base64_encode( (string) file_get_contents( $icon ) ); // phpcs:ignore
+		}
+		return 'dashicons-media-spreadsheet';
+	}
+
+	/**
+	 * Kopfbereich mit Logo, Name und Versionsnummer.
+	 */
+	private static function render_header() {
+		$logo = self::logo_url();
+		?>
+		<div style="display:flex;align-items:center;gap:16px;margin:10px 0 16px;">
+			<?php if ( $logo ) : ?>
+				<img src="<?php echo esc_url( $logo ); ?>" alt="NHZ" style="height:56px;width:auto;">
+			<?php else : ?>
+				<span style="display:inline-flex;align-items:center;justify-content:center;height:56px;min-width:56px;padding:0 12px;border-radius:8px;background:#1d2327;color:#fff;font:700 22px/1 sans-serif;letter-spacing:1px;">NHZ</span>
+			<?php endif; ?>
+			<div>
+				<h1 style="margin:0;padding:0;"><?php echo esc_html( RECHNUNGSTRANSFER_NAME ); ?></h1>
+				<span style="color:#646970;"><?php echo esc_html( sprintf( /* translators: %s: Versionsnummer */ __( 'Version %s', 'rechnungstransfer' ), RECHNUNGSTRANSFER_VERSION ) ); ?></span>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Name und Version in der Fußzeile der Plugin-Seite.
+	 */
+	public static function footer_text( $text ) {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( $screen && false !== strpos( (string) $screen->id, self::PAGE ) ) {
+			return esc_html( RECHNUNGSTRANSFER_NAME . ' ' . sprintf( __( 'Version %s', 'rechnungstransfer' ), RECHNUNGSTRANSFER_VERSION ) );
+		}
+		return $text;
 	}
 
 	private static function fields() {
@@ -503,7 +562,7 @@ class Rechnungstransfer_Settings {
 		}
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Rechnungstransfer', 'rechnungstransfer' ); ?></h1>
+			<?php self::render_header(); ?>
 			<p><?php esc_html_e( 'Ruft ein IMAP-Postfach ab und leitet E-Mails mit Rechnungsanhang automatisch an eine Import-Adresse weiter, z. B. an die Beleg-Import-Adresse von Lexware Office.', 'rechnungstransfer' ); ?></p>
 
 			<?php if ( is_array( $notice ) ) : ?>

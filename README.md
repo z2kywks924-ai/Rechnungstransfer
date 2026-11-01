@@ -1,4 +1,4 @@
-# Rechnungstransfer
+# NHZ Rechnungstransfer
 
 WordPress-Plugin, das ein IMAP-Postfach im Hintergrund abruft und E-Mails mit
 Rechnungsanhang automatisch an eine Import-Adresse weiterleitet, z. B. an die
@@ -32,7 +32,7 @@ E-Mail-Adresse für den Belegimport von **Lexware Office**.
 
 1. Ordner `rechnungstransfer` nach `wp-content/plugins/` kopieren (oder als ZIP hochladen).
 2. Plugin aktivieren.
-3. **Einstellungen > Rechnungstransfer**: IMAP-Zugang, SMTP-Zugang, Startdatum und die
+3. Menüpunkt **NHZ Rechnungstransfer** im Backend: IMAP-Zugang, SMTP-Zugang, Startdatum und die
    Lexware-Importadresse eintragen, „Aktiv“ anhaken, speichern.
 4. „Verbindung testen“ und „Testmail senden“, danach „Jetzt abrufen“.
 

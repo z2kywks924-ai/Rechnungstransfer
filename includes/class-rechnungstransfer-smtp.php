@@ -135,8 +135,8 @@ class Rechnungstransfer_Smtp {
 		$o  = Rechnungstransfer_Settings::get_options();
 		$ok = self::send(
 			$to,
-			__( 'Rechnungstransfer: Testmail', 'rechnungstransfer' ),
-			__( 'Diese Testmail wurde vom Plugin Rechnungstransfer verschickt. Der Versand funktioniert.', 'rechnungstransfer' ),
+			__( 'NHZ Rechnungstransfer: Testmail', 'rechnungstransfer' ),
+			__( 'Diese Testmail wurde vom Plugin NHZ Rechnungstransfer verschickt. Der Versand funktioniert.', 'rechnungstransfer' ),
 			array( 'Content-Type: text/plain; charset=UTF-8' )
 		);
 		$via = ! empty( $o['smtp_enabled'] )
