@@ -30,5 +30,17 @@ $single = "Subject: Scan\nContent-Type: application/pdf; name=scan.pdf\nContent-
 $mail   = Rechnungstransfer_Mime::parse( $single );
 check( 1 === count( $mail['attachments'] ) && 'PDFDATA' === $mail['attachments'][0]['data'], 'Mail besteht nur aus einem PDF' );
 
+echo "Duplikatschutz\n";
+$a = array( 'name' => 'RE-1.pdf', 'data' => 'PDF-A' );
+$b = array( 'name' => 'RE-2.pdf', 'data' => 'PDF-B' );
+$c = array( 'name' => 'Kopie von RE-1.pdf', 'data' => 'PDF-A' );
+list( $fresh, $dups ) = Rechnungstransfer_Fetcher::remove_already_sent( array( $a, $b, $c ) );
+check( array( 'RE-1.pdf', 'RE-2.pdf' ) === array_column( $fresh, 'name' ) && array( 'Kopie von RE-1.pdf' ) === $dups, 'Gleicher Inhalt in derselben Mail nur einmal' );
+$m = new ReflectionMethod( 'Rechnungstransfer_Fetcher', 'remember_sent' );
+$m->setAccessible( true );
+$m->invoke( null, array( $a ) );
+list( $fresh, $dups ) = Rechnungstransfer_Fetcher::remove_already_sent( array( $c, $b ) );
+check( array( 'RE-2.pdf' ) === array_column( $fresh, 'name' ) && array( 'Kopie von RE-1.pdf' ) === $dups, 'Bereits gesendeter Inhalt wird erkannt (auch umbenannt)' );
+
 echo $GLOBALS['rt_failures'] ? "\n{$GLOBALS['rt_failures']} Fehler\n" : "\nAlle Tests bestanden\n";
 exit( $GLOBALS['rt_failures'] ? 1 : 0 );

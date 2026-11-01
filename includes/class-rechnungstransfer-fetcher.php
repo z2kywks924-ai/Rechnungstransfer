@@ -14,13 +14,17 @@ class Rechnungstransfer_Fetcher {
 	const STATE_OPTION = 'rechnungstransfer_state';
 	const LOG_OPTION   = 'rechnungstransfer_log';
 	const LOCK         = 'rechnungstransfer_lock';
+	const SENT_OPTION  = 'rechnungstransfer_sent';
 	const LOG_LIMIT    = 100;
 
 	/** Maximal verarbeitete Nachrichten pro Durchlauf (Rest folgt im nächsten). */
 	const MAX_PER_RUN = 25;
 
 	/** Gemerkte Message-IDs zum Schutz vor Doppelversand. */
-	const SEEN_LIMIT = 1000;
+	const SEEN_LIMIT = 5000;
+
+	/** Gemerkte Fingerabdrücke bereits weitergeleiteter Rechnungsdateien. */
+	const SENT_LIMIT = 20000;
 
 	public static function init() {
 		add_filter( 'cron_schedules', array( __CLASS__, 'cron_schedules' ) ); // phpcs:ignore WordPress.WP.CronInterval
@@ -124,10 +128,9 @@ class Rechnungstransfer_Fetcher {
 		if ( ! is_email( $o['target_email'] ) ) {
 			return self::finish( self::result( false, __( 'Keine gültige Ziel-Adresse (Lexware-Importadresse) eingetragen.', 'rechnungstransfer' ) ) );
 		}
-		if ( get_transient( self::LOCK ) ) {
+		if ( ! self::acquire_lock() ) {
 			return self::result( false, __( 'Ein Abruf läuft bereits.', 'rechnungstransfer' ) );
 		}
-		set_transient( self::LOCK, 1, 10 * MINUTE_IN_SECONDS );
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 		}
@@ -180,7 +183,31 @@ class Rechnungstransfer_Fetcher {
 				$invoices = Rechnungstransfer_Detector::find_invoice_attachments( $mail['attachments'], $mail['subject'], $o );
 				$seen_key = '' !== $mail['message_id'] ? $mail['message_id'] : md5( $raw );
 
-				if ( ! empty( $invoices ) && ! in_array( $seen_key, $state['seen'], true ) ) {
+				// Doppelversand verhindern: dieselbe Mail (Message-ID) oder dieselbe
+				// Rechnungsdatei (Fingerabdruck des Inhalts) wird nie zweimal weitergeleitet,
+				// auch wenn sie erneut, weitergeleitet oder als Erinnerung eingeht.
+				$duplicates = array();
+				if ( ! empty( $invoices ) ) {
+					if ( in_array( $seen_key, $state['seen'], true ) ) {
+						$duplicates = wp_list_pluck( $invoices, 'name' );
+						$invoices   = array();
+					} else {
+						list( $invoices, $duplicates ) = self::remove_already_sent( $invoices );
+					}
+					if ( ! empty( $duplicates ) ) {
+						self::log(
+							array(
+								'subject' => $mail['subject'],
+								'from'    => $mail['from'],
+								'files'   => $duplicates,
+								'status'  => 'duplicate',
+								'note'    => __( 'Bereits früher weitergeleitet, nicht erneut gesendet.', 'rechnungstransfer' ),
+							)
+						);
+					}
+				}
+
+				if ( ! empty( $invoices ) ) {
 					/**
 					 * Erlaubt es, die Weiterleitung einzelner Mails zu verhindern.
 					 *
@@ -196,13 +223,15 @@ class Rechnungstransfer_Fetcher {
 								'from'    => $mail['from'],
 								'files'   => wp_list_pluck( $invoices, 'name' ),
 								'status'  => $ok ? 'sent' : 'failed',
-								'note'    => '',
+								'note'    => $ok ? '' : Rechnungstransfer_Smtp::last_error(),
 							)
 						);
 						if ( ! $ok ) {
 							// Nicht weiter vorrücken, damit diese Mail beim nächsten Lauf erneut versucht wird.
-							throw new Rechnungstransfer_Imap_Exception( __( 'Versand über wp_mail fehlgeschlagen. Bitte die Mail-Konfiguration von WordPress prüfen (z. B. SMTP-Plugin).', 'rechnungstransfer' ) );
+							$error = Rechnungstransfer_Smtp::last_error();
+							throw new Rechnungstransfer_Imap_Exception( __( 'Versand fehlgeschlagen. Bitte die SMTP-Einstellungen prüfen.', 'rechnungstransfer' ) . ( '' !== $error ? ' ' . $error : '' ) );
 						}
+						self::remember_sent( $invoices );
 						++$forwarded;
 						$state['seen'][] = $seen_key;
 						$state['seen']   = array_slice( $state['seen'], -self::SEEN_LIMIT );
@@ -230,7 +259,7 @@ class Rechnungstransfer_Fetcher {
 			$result = self::result( false, $e->getMessage(), $forwarded );
 		}
 
-		delete_transient( self::LOCK );
+		self::release_lock();
 		return self::finish( $result );
 	}
 
@@ -275,7 +304,7 @@ class Rechnungstransfer_Fetcher {
 			)
 		);
 
-		$ok = wp_mail( $o['target_email'], $subject, $body, array( 'Content-Type: text/plain; charset=UTF-8' ), $files );
+		$ok = Rechnungstransfer_Smtp::send( $o['target_email'], $subject, $body, array( 'Content-Type: text/plain; charset=UTF-8' ), $files );
 
 		foreach ( $files as $file ) {
 			wp_delete_file( $file );
@@ -326,8 +355,80 @@ class Rechnungstransfer_Fetcher {
 		$state                = self::get_state();
 		$state['account_key'] = '';
 		$state['last_uid']    = 0;
-		$state['seen']        = array();
+		// Message-IDs und Datei-Fingerabdrücke bleiben erhalten: kein Doppelversand.
 		self::save_state( $state );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Duplikatschutz
+	 * ------------------------------------------------------------------- */
+
+	public static function fingerprint( $data ) {
+		return substr( hash( 'sha256', (string) $data ), 0, 32 );
+	}
+
+	/**
+	 * Trennt Anhänge in neue und bereits gesendete (auch Dubletten innerhalb der Mail).
+	 *
+	 * @return array{0: array, 1: string[]} Neue Anhänge, Namen der Dubletten.
+	 */
+	public static function remove_already_sent( array $invoices ) {
+		$sent       = self::get_sent();
+		$fresh      = array();
+		$duplicates = array();
+		$in_mail    = array();
+		foreach ( $invoices as $attachment ) {
+			$fp = self::fingerprint( $attachment['data'] );
+			if ( isset( $sent[ $fp ] ) || isset( $in_mail[ $fp ] ) ) {
+				$duplicates[] = $attachment['name'];
+				continue;
+			}
+			$in_mail[ $fp ] = true;
+			$fresh[]        = $attachment;
+		}
+		return array( $fresh, $duplicates );
+	}
+
+	private static function remember_sent( array $invoices ) {
+		$sent = self::get_sent();
+		foreach ( $invoices as $attachment ) {
+			$sent[ self::fingerprint( $attachment['data'] ) ] = time();
+		}
+		if ( count( $sent ) > self::SENT_LIMIT ) {
+			$sent = array_slice( $sent, -self::SENT_LIMIT, null, true );
+		}
+		update_option( self::SENT_OPTION, $sent, false );
+	}
+
+	private static function get_sent() {
+		$sent = get_option( self::SENT_OPTION, array() );
+		return is_array( $sent ) ? $sent : array();
+	}
+
+	public static function sent_count() {
+		return count( self::get_sent() );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Sperre gegen parallele Abrufe (Cron + manueller Abruf gleichzeitig)
+	 * ------------------------------------------------------------------- */
+
+	private static function acquire_lock() {
+		// add_option ist atomar: schlägt fehl, wenn die Sperre schon existiert.
+		if ( add_option( self::LOCK, time(), '', 'no' ) ) {
+			return true;
+		}
+		$since = (int) get_option( self::LOCK, 0 );
+		if ( $since > 0 && $since < time() - 15 * MINUTE_IN_SECONDS ) {
+			// Verwaiste Sperre (z. B. abgebrochener Prozess) entfernen.
+			delete_option( self::LOCK );
+			return (bool) add_option( self::LOCK, time(), '', 'no' );
+		}
+		return false;
+	}
+
+	private static function release_lock() {
+		delete_option( self::LOCK );
 	}
 
 	private static function log( array $entry ) {

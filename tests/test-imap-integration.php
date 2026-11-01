@@ -29,11 +29,19 @@ $GLOBALS['rt_options']['rechnungstransfer_options'] = array(
 $test = Rechnungstransfer_Fetcher::test_connection();
 echo 'Verbindungstest: ' . ( $test['ok'] ? 'OK' : 'FEHLER' ) . ' – ' . $test['message'] . "\n";
 
-foreach ( array( 1, 2 ) as $round ) {
+foreach ( array( 1, 2, 3 ) as $round ) {
+	if ( 3 === $round ) {
+		echo "\n(Zurücksetzen: Postfach wird ab Startdatum erneut geprüft)";
+		Rechnungstransfer_Fetcher::reset_state();
+	}
 	$GLOBALS['rt_mails'] = array();
 	$result              = Rechnungstransfer_Fetcher::run();
 	echo "\nLauf $round: " . ( $result['ok'] ? 'OK' : 'FEHLER' ) . ' – ' . $result['message'] . "\n";
 	foreach ( $GLOBALS['rt_mails'] as $mail ) {
 		echo '  -> ' . $mail['to'] . ' | ' . $mail['subject'] . ' | ' . implode( ', ', array_keys( $mail['files'] ) ) . "\n";
 	}
+}
+echo "\nProtokoll:\n";
+foreach ( array_reverse( Rechnungstransfer_Fetcher::get_log() ) as $entry ) {
+	echo '  ' . $entry['status'] . ' | ' . $entry['subject'] . ' | ' . implode( ', ', $entry['files'] ) . "\n";
 }

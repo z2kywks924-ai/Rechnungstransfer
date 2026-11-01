@@ -15,24 +15,31 @@ E-Mail-Adresse für den Belegimport von **Lexware Office**.
   Auch Anhänge in weitergeleiteten Mails (message/rfc822) werden gefunden.
 - **Hintergrund-Abruf** per WP-Cron (5 Min. bis täglich), plus Buttons
   „Verbindung testen“, „Jetzt abrufen“ und „Erneut ab Startdatum abrufen“.
-- **Kein Doppelversand**: Fortschritt wird pro Postfach gemerkt (UID + Message-ID).
-  Schlägt der Versand fehl, wird die Mail beim nächsten Abruf erneut versucht.
+- **Kein Doppelversand**: Jede weitergeleitete Rechnungsdatei bekommt einen Fingerabdruck
+  (SHA-256 des Inhalts). Dieselbe Rechnung wird nie ein zweites Mal gesendet, auch nicht,
+  wenn sie erneut, als Zahlungserinnerung, weitergeleitet oder umbenannt eingeht, und auch
+  nicht nach „Erneut ab Startdatum prüfen“. Zusätzlich werden Message-IDs gemerkt und
+  parallele Abrufe gesperrt. Schlägt der Versand fehl, wird die Mail beim nächsten Abruf erneut versucht.
+- **Versand über externen SMTP-Server** (STARTTLS/SSL, Login, eigene Absenderadresse),
+  wahlweise nur für die Mails dieses Plugins oder für alle Mails der WordPress-Seite.
+  Mit Button „Testmail senden“.
 - **Protokoll** der letzten 100 Weiterleitungen in den Einstellungen.
 - Passwort wird verschlüsselt gespeichert, alternativ per Konstante in der `wp-config.php`:
-  `define( 'RECHNUNGSTRANSFER_IMAP_PASSWORD', '...' );`
+  `define( 'RECHNUNGSTRANSFER_IMAP_PASSWORD', '...' );` bzw.
+  `define( 'RECHNUNGSTRANSFER_SMTP_PASSWORD', '...' );`
 
 ## Installation
 
 1. Ordner `rechnungstransfer` nach `wp-content/plugins/` kopieren (oder als ZIP hochladen).
 2. Plugin aktivieren.
-3. **Einstellungen > Rechnungstransfer**: IMAP-Zugang, Startdatum und die
+3. **Einstellungen > Rechnungstransfer**: IMAP-Zugang, SMTP-Zugang, Startdatum und die
    Lexware-Importadresse eintragen, „Aktiv“ anhaken, speichern.
-4. „Verbindung testen“, danach „Jetzt abrufen“.
+4. „Verbindung testen“ und „Testmail senden“, danach „Jetzt abrufen“.
 
 Hinweise:
 
-- WordPress muss E-Mails zuverlässig versenden können. Empfohlen ist ein SMTP-Plugin
-  (z. B. WP Mail SMTP), da Mails über PHP `mail()` oft im Spam landen.
+- Ohne SMTP-Einstellungen nutzt das Plugin den normalen WordPress-Versand (PHP `mail()`),
+  der bei vielen Hostern unzuverlässig ist. Die SMTP-Einstellungen sind daher empfohlen.
 - WP-Cron läuft nur bei Seitenaufrufen. Für feste Intervalle einen echten Cronjob einrichten:
   `*/5 * * * * curl -s https://example.de/wp-cron.php?doing_wp_cron >/dev/null`
 - Gmail/Outlook/GMX: IMAP aktivieren und ggf. ein App-Passwort verwenden.

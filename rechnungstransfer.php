@@ -22,9 +22,11 @@ define( 'RECHNUNGSTRANSFER_DIR', plugin_dir_path( __FILE__ ) );
 require_once RECHNUNGSTRANSFER_DIR . 'includes/class-rechnungstransfer-detector.php';
 require_once RECHNUNGSTRANSFER_DIR . 'includes/class-rechnungstransfer-mime.php';
 require_once RECHNUNGSTRANSFER_DIR . 'includes/class-rechnungstransfer-imap.php';
+require_once RECHNUNGSTRANSFER_DIR . 'includes/class-rechnungstransfer-smtp.php';
 require_once RECHNUNGSTRANSFER_DIR . 'includes/class-rechnungstransfer-fetcher.php';
 require_once RECHNUNGSTRANSFER_DIR . 'includes/class-rechnungstransfer-settings.php';
 
+Rechnungstransfer_Smtp::init();
 Rechnungstransfer_Fetcher::init();
 Rechnungstransfer_Settings::init();
 

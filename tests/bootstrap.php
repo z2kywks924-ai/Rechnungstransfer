@@ -25,6 +25,7 @@ function apply_filters( $hook, $value ) { return $value; }
 function doing_action( $hook ) { return false; }
 function get_option( $k, $d = false ) { return array_key_exists( $k, $GLOBALS['rt_options'] ) ? $GLOBALS['rt_options'][ $k ] : $d; }
 function update_option( $k, $v ) { $GLOBALS['rt_options'][ $k ] = $v; return true; }
+function add_option( $k, $v ) { if ( array_key_exists( $k, $GLOBALS['rt_options'] ) ) { return false; } $GLOBALS['rt_options'][ $k ] = $v; return true; }
 function delete_option( $k ) { unset( $GLOBALS['rt_options'][ $k ] ); return true; }
 function get_transient( $k ) { return get_option( '_t_' . $k ); }
 function set_transient( $k, $v ) { return update_option( '_t_' . $k, $v ); }
@@ -38,6 +39,7 @@ function wp_generate_password( $n ) { return bin2hex( random_bytes( (int) ceil( 
 function wp_mkdir_p( $d ) { return is_dir( $d ) || mkdir( $d, 0777, true ); }
 function wp_delete_file( $f ) { @unlink( $f ); }
 function sanitize_file_name( $n ) { return preg_replace( '/[^A-Za-z0-9._\-äöüÄÖÜß]/u', '-', $n ); }
+function is_wp_error( $e ) { return false; }
 function wp_list_pluck( $l, $f ) { return array_column( $l, $f ); }
 function wp_date( $f, $t = null ) { return gmdate( $f, null === $t ? time() : $t ); }
 function number_format_i18n( $n, $d = 0 ) { return number_format( $n, $d, ',', '.' ); }
@@ -53,6 +55,7 @@ function wp_mail( $to, $subject, $body, $headers, $attachments ) {
 require __DIR__ . '/../includes/class-rechnungstransfer-detector.php';
 require __DIR__ . '/../includes/class-rechnungstransfer-mime.php';
 require __DIR__ . '/../includes/class-rechnungstransfer-imap.php';
+require __DIR__ . '/../includes/class-rechnungstransfer-smtp.php';
 require __DIR__ . '/../includes/class-rechnungstransfer-fetcher.php';
 // Settings-Klasse braucht für die Tests nur get_options/get_password.
 if ( ! class_exists( 'Rechnungstransfer_Settings' ) ) {

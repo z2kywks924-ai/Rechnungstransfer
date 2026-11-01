@@ -30,6 +30,16 @@ class Rechnungstransfer_Settings {
 			'keywords'         => 'rechnung, invoice, faktura',
 			'match_subject'    => 1,
 			'extensions'       => 'pdf, xml',
+			'smtp_enabled'     => 0,
+			'smtp_scope'       => 'plugin',
+			'smtp_host'        => '',
+			'smtp_port'        => 587,
+			'smtp_encryption'  => 'tls',
+			'smtp_verify_cert' => 1,
+			'smtp_user'        => '',
+			'smtp_password'    => '',
+			'smtp_from_email'  => '',
+			'smtp_from_name'   => '',
 		);
 	}
 
@@ -43,7 +53,7 @@ class Rechnungstransfer_Settings {
 		add_action( 'admin_init', array( __CLASS__, 'register' ) );
 		add_action( 'update_option_' . self::OPTION, array( 'Rechnungstransfer_Fetcher', 'reschedule' ) );
 		add_action( 'add_option_' . self::OPTION, array( 'Rechnungstransfer_Fetcher', 'reschedule' ) );
-		foreach ( array( 'test', 'run', 'reset', 'clear_log' ) as $action ) {
+		foreach ( array( 'test', 'run', 'reset', 'clear_log', 'smtp_test' ) as $action ) {
 			add_action( 'admin_post_rechnungstransfer_' . $action, array( __CLASS__, 'handle_' . $action ) );
 		}
 		add_filter( 'plugin_action_links_' . plugin_basename( RECHNUNGSTRANSFER_FILE ), array( __CLASS__, 'action_links' ) );
@@ -62,6 +72,32 @@ class Rechnungstransfer_Settings {
 			return (string) RECHNUNGSTRANSFER_IMAP_PASSWORD;
 		}
 		return self::decrypt( self::get_options()['imap_password'] );
+	}
+
+	/**
+	 * Liefert das SMTP-Passwort im Klartext. Alternativ per Konstante
+	 * RECHNUNGSTRANSFER_SMTP_PASSWORD in der wp-config.php.
+	 */
+	public static function get_smtp_password() {
+		if ( defined( 'RECHNUNGSTRANSFER_SMTP_PASSWORD' ) ) {
+			return (string) RECHNUNGSTRANSFER_SMTP_PASSWORD;
+		}
+		return self::decrypt( self::get_options()['smtp_password'] );
+	}
+
+	/**
+	 * Verarbeitet ein Passwortfeld: leer = bisheriges behalten, sonst verschlüsseln.
+	 */
+	private static function sanitize_secret( $input, $old_value ) {
+		$password = (string) $input;
+		if ( '' === $password ) {
+			return $old_value;
+		}
+		if ( 0 === strpos( $password, 'v1:' ) && '' !== self::decrypt( $password ) ) {
+			// Bereits verschlüsselt (WordPress ruft sanitize beim ersten Speichern doppelt auf).
+			return $password;
+		}
+		return self::encrypt( $password );
 	}
 
 	private static function key() {
@@ -156,6 +192,22 @@ class Rechnungstransfer_Settings {
 					'max_size_mb'    => __( 'Maximale Mailgröße', 'rechnungstransfer' ),
 				),
 			),
+			'rechnungstransfer_smtp'    => array(
+				'title'  => __( 'Versand über externen SMTP-Server', 'rechnungstransfer' ),
+				'intro'  => __( 'Empfohlen: Die weitergeleiteten Rechnungen werden über deinen eigenen Mailserver verschickt statt über PHP mail(). Das ist zuverlässiger und landet nicht im Spam.', 'rechnungstransfer' ),
+				'fields' => array(
+					'smtp_enabled'     => __( 'SMTP verwenden', 'rechnungstransfer' ),
+					'smtp_scope'       => __( 'Gilt für', 'rechnungstransfer' ),
+					'smtp_host'        => __( 'SMTP-Server', 'rechnungstransfer' ),
+					'smtp_port'        => __( 'Port', 'rechnungstransfer' ),
+					'smtp_encryption'  => __( 'Verschlüsselung', 'rechnungstransfer' ),
+					'smtp_verify_cert' => __( 'Zertifikat', 'rechnungstransfer' ),
+					'smtp_user'        => __( 'Benutzername', 'rechnungstransfer' ),
+					'smtp_password'    => __( 'Passwort', 'rechnungstransfer' ),
+					'smtp_from_email'  => __( 'Absender-Adresse', 'rechnungstransfer' ),
+					'smtp_from_name'   => __( 'Absender-Name', 'rechnungstransfer' ),
+				),
+			),
 			'rechnungstransfer_detect'  => array(
 				'title'  => __( 'Rechnungserkennung', 'rechnungstransfer' ),
 				'intro'  => __( 'Ein Anhang gilt als Rechnung, wenn seine Dateiendung erlaubt ist und der Dateiname oder (falls aktiviert) der Betreff eines der Stichwörter enthält. Ohne Stichwörter wird jeder Anhang mit erlaubter Endung weitergeleitet.', 'rechnungstransfer' ),
@@ -212,7 +264,7 @@ class Rechnungstransfer_Settings {
 		$old   = self::get_options();
 		$out   = self::defaults();
 
-		foreach ( array( 'enabled', 'match_subject', 'imap_verify_cert' ) as $key ) {
+		foreach ( array( 'enabled', 'match_subject', 'imap_verify_cert', 'smtp_enabled', 'smtp_verify_cert' ) as $key ) {
 			$out[ $key ] = empty( $input[ $key ] ) ? 0 : 1;
 		}
 
@@ -222,15 +274,25 @@ class Rechnungstransfer_Settings {
 		$out['imap_user']       = isset( $input['imap_user'] ) ? sanitize_text_field( $input['imap_user'] ) : '';
 		$out['imap_folder']     = isset( $input['imap_folder'] ) && '' !== trim( $input['imap_folder'] ) ? sanitize_text_field( $input['imap_folder'] ) : 'INBOX';
 
-		// Leeres Passwortfeld = bisheriges Passwort behalten.
-		$password             = isset( $input['imap_password'] ) ? (string) $input['imap_password'] : '';
-		if ( '' === $password ) {
-			$out['imap_password'] = $old['imap_password'];
-		} elseif ( 0 === strpos( $password, 'v1:' ) && '' !== self::decrypt( $password ) ) {
-			// Bereits verschlüsselt (WordPress ruft sanitize beim ersten Speichern doppelt auf).
-			$out['imap_password'] = $password;
-		} else {
-			$out['imap_password'] = self::encrypt( $password );
+		$out['imap_password'] = self::sanitize_secret( isset( $input['imap_password'] ) ? $input['imap_password'] : '', $old['imap_password'] );
+
+		// SMTP.
+		$out['smtp_scope']      = isset( $input['smtp_scope'] ) && 'all' === $input['smtp_scope'] ? 'all' : 'plugin';
+		$out['smtp_host']       = isset( $input['smtp_host'] ) ? preg_replace( '/[^A-Za-z0-9.\-:\[\]]/', '', $input['smtp_host'] ) : '';
+		$out['smtp_port']       = isset( $input['smtp_port'] ) ? max( 1, min( 65535, absint( $input['smtp_port'] ) ) ) : 587;
+		$out['smtp_encryption'] = isset( $input['smtp_encryption'] ) && in_array( $input['smtp_encryption'], array( 'tls', 'ssl', 'none' ), true ) ? $input['smtp_encryption'] : 'tls';
+		$out['smtp_user']       = isset( $input['smtp_user'] ) ? sanitize_text_field( $input['smtp_user'] ) : '';
+		$out['smtp_password']   = self::sanitize_secret( isset( $input['smtp_password'] ) ? $input['smtp_password'] : '', $old['smtp_password'] );
+		$out['smtp_from_name']  = isset( $input['smtp_from_name'] ) ? sanitize_text_field( $input['smtp_from_name'] ) : '';
+		$from                   = isset( $input['smtp_from_email'] ) ? sanitize_email( $input['smtp_from_email'] ) : '';
+		if ( '' !== $from && ! is_email( $from ) ) {
+			add_settings_error( self::OPTION, 'invalid_from', __( 'Die Absender-Adresse ist ungültig.', 'rechnungstransfer' ) );
+			$from = $old['smtp_from_email'];
+		}
+		$out['smtp_from_email'] = $from;
+		if ( $out['smtp_enabled'] && '' === $out['smtp_host'] ) {
+			add_settings_error( self::OPTION, 'smtp_host', __( 'SMTP ist aktiviert, aber kein SMTP-Server eingetragen. SMTP wurde deaktiviert.', 'rechnungstransfer' ) );
+			$out['smtp_enabled'] = 0;
 		}
 
 		$email = isset( $input['target_email'] ) ? sanitize_email( $input['target_email'] ) : '';
@@ -272,7 +334,11 @@ class Rechnungstransfer_Settings {
 			case 'enabled':
 			case 'match_subject':
 			case 'imap_verify_cert':
+			case 'smtp_enabled':
+			case 'smtp_verify_cert':
 				$labels = array(
+					'smtp_enabled'     => __( 'E-Mails über den unten eingetragenen SMTP-Server versenden', 'rechnungstransfer' ),
+					'smtp_verify_cert' => __( 'SSL-Zertifikat prüfen (nur bei selbstsignierten Zertifikaten abschalten)', 'rechnungstransfer' ),
 					'enabled'          => __( 'Postfach regelmäßig im Hintergrund abrufen und Rechnungen weiterleiten', 'rechnungstransfer' ),
 					'match_subject'    => __( 'Enthält der Betreff ein Stichwort, gelten alle Anhänge mit erlaubter Endung als Rechnung', 'rechnungstransfer' ),
 					'imap_verify_cert' => __( 'SSL-Zertifikat prüfen (nur bei selbstsignierten Zertifikaten abschalten)', 'rechnungstransfer' ),
@@ -304,6 +370,37 @@ class Rechnungstransfer_Settings {
 				$desc = __( 'WP-Cron läuft nur bei Seitenaufrufen. Für exakte Zeiten einen echten Cronjob auf wp-cron.php einrichten.', 'rechnungstransfer' );
 				break;
 
+			case 'smtp_scope':
+				$choices = array(
+					'plugin' => __( 'Nur für Mails dieses Plugins (weitergeleitete Rechnungen)', 'rechnungstransfer' ),
+					'all'    => __( 'Für alle E-Mails dieser WordPress-Seite', 'rechnungstransfer' ),
+				);
+				self::select( $id, $name, $choices, $o[ $key ] );
+				$desc = __( '"Alle E-Mails" nur wählen, wenn kein anderes SMTP-Plugin aktiv ist.', 'rechnungstransfer' );
+				break;
+
+			case 'smtp_encryption':
+				$choices = array(
+					'tls'  => __( 'STARTTLS (meist Port 587)', 'rechnungstransfer' ),
+					'ssl'  => __( 'SSL/TLS (meist Port 465)', 'rechnungstransfer' ),
+					'none' => __( 'Keine (nicht empfohlen)', 'rechnungstransfer' ),
+				);
+				self::select( $id, $name, $choices, $o[ $key ] );
+				break;
+
+			case 'smtp_password':
+				$has = '' !== $o['smtp_password'] || defined( 'RECHNUNGSTRANSFER_SMTP_PASSWORD' );
+				printf(
+					'<input type="password" class="regular-text" id="%s" name="%s" value="" autocomplete="new-password" placeholder="%s">',
+					esc_attr( $id ),
+					esc_attr( $name ),
+					esc_attr( $has ? __( '•••••••• (gespeichert)', 'rechnungstransfer' ) : '' )
+				);
+				$desc = defined( 'RECHNUNGSTRANSFER_SMTP_PASSWORD' )
+					? __( 'Das Passwort wird aus der Konstante RECHNUNGSTRANSFER_SMTP_PASSWORD in der wp-config.php gelesen.', 'rechnungstransfer' )
+					: __( 'Wird verschlüsselt gespeichert. Leer lassen, um das gespeicherte Passwort zu behalten.', 'rechnungstransfer' );
+				break;
+
 			case 'imap_password':
 				$has = '' !== $o['imap_password'] || defined( 'RECHNUNGSTRANSFER_IMAP_PASSWORD' );
 				printf(
@@ -319,10 +416,11 @@ class Rechnungstransfer_Settings {
 
 			case 'start_date':
 				printf( '<input type="date" id="%s" name="%s" value="%s">', esc_attr( $id ), esc_attr( $name ), esc_attr( $o[ $key ] ) );
-				$desc = __( 'Nur Mails, die an oder nach diesem Tag eingegangen sind, werden berücksichtigt. Wird das Datum geändert, beginnt der Abruf ab dem neuen Datum (bereits weitergeleitete Mails werden nicht doppelt gesendet).', 'rechnungstransfer' );
+				$desc = __( 'Nur Mails, die an oder nach diesem Tag eingegangen sind, werden berücksichtigt. Wird das Datum geändert, beginnt der Abruf ab dem neuen Datum (bereits weitergeleitete Rechnungen werden nie doppelt gesendet).', 'rechnungstransfer' );
 				break;
 
 			case 'imap_port':
+			case 'smtp_port':
 			case 'max_size_mb':
 				printf( '<input type="number" class="small-text" id="%s" name="%s" value="%d" min="1">', esc_attr( $id ), esc_attr( $name ), (int) $o[ $key ] );
 				if ( 'max_size_mb' === $key ) {
@@ -344,13 +442,19 @@ class Rechnungstransfer_Settings {
 			default:
 				$placeholders = array(
 					'imap_host' => 'imap.example.de',
-					'imap_user' => 'rechnungen@example.de',
+					'imap_user'       => 'rechnungen@example.de',
+					'smtp_host'       => 'smtp.example.de',
+					'smtp_user'       => 'rechnungen@example.de',
+					'smtp_from_email' => 'rechnungen@example.de',
+					'smtp_from_name'  => get_bloginfo( 'name' ),
 				);
 				$descriptions = array(
 					'imap_folder'    => __( 'Standard: INBOX. Unterordner z. B. INBOX/Rechnungen oder INBOX.Rechnungen (je nach Server).', 'rechnungstransfer' ),
 					'keywords'       => __( 'Kommagetrennt, Groß-/Kleinschreibung egal.', 'rechnungstransfer' ),
 					'extensions'     => __( 'Kommagetrennt, z. B. pdf, xml (XRechnung/ZUGFeRD), jpg, png. Leer lassen für alle Dateitypen.', 'rechnungstransfer' ),
 					'subject_prefix' => __( 'Optional, wird dem Betreff der weitergeleiteten Mail vorangestellt.', 'rechnungstransfer' ),
+					'smtp_user'       => __( 'Leer lassen, wenn der Server keine Anmeldung verlangt.', 'rechnungstransfer' ),
+					'smtp_from_email' => __( 'Leer lassen für den Benutzernamen bzw. die WordPress-Standardadresse. Viele Server erlauben nur die eigene Adresse als Absender.', 'rechnungstransfer' ),
 				);
 				printf(
 					'<input type="text" class="regular-text" id="%s" name="%s" value="%s" placeholder="%s">',
@@ -419,6 +523,9 @@ class Rechnungstransfer_Settings {
 					}
 					?>
 					<br>
+					<strong><?php esc_html_e( 'Bisher weitergeleitete Rechnungsdateien:', 'rechnungstransfer' ); ?></strong>
+					<?php echo esc_html( number_format_i18n( Rechnungstransfer_Fetcher::sent_count() ) ); ?>
+					<br>
 					<strong><?php esc_html_e( 'Letzter Abruf:', 'rechnungstransfer' ); ?></strong>
 					<?php
 					if ( $state['last_run'] ) {
@@ -433,10 +540,11 @@ class Rechnungstransfer_Settings {
 					<?php
 					self::action_button( 'test', __( 'Verbindung testen', 'rechnungstransfer' ) );
 					self::action_button( 'run', __( 'Jetzt abrufen', 'rechnungstransfer' ), 'primary' );
-					self::action_button( 'reset', __( 'Erneut ab Startdatum abrufen', 'rechnungstransfer' ) );
+					self::action_button( 'reset', __( 'Erneut ab Startdatum prüfen', 'rechnungstransfer' ) );
+					self::action_button( 'smtp_test', __( 'Testmail senden', 'rechnungstransfer' ) );
 					?>
 				</p>
-				<p class="description"><?php esc_html_e( 'Bitte zuerst speichern, dann testen. "Erneut ab Startdatum abrufen" vergisst, welche Mails schon weitergeleitet wurden, und sendet beim nächsten Abruf alle Rechnungen ab dem Startdatum noch einmal.', 'rechnungstransfer' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Bitte zuerst speichern, dann testen. "Testmail senden" schickt eine Mail mit den aktuellen Versandeinstellungen an deine eigene Adresse. "Erneut ab Startdatum prüfen" durchsucht das Postfach beim nächsten Abruf noch einmal komplett ab dem Startdatum. Bereits weitergeleitete Rechnungen werden dabei nicht erneut gesendet.', 'rechnungstransfer' ); ?></p>
 			</div>
 
 			<form method="post" action="options.php">
@@ -463,7 +571,8 @@ class Rechnungstransfer_Settings {
 		$status_labels = array(
 			'sent'    => '&#9989; ' . esc_html__( 'weitergeleitet', 'rechnungstransfer' ),
 			'failed'  => '&#10060; ' . esc_html__( 'fehlgeschlagen', 'rechnungstransfer' ),
-			'skipped' => '&#9888;&#65039; ' . esc_html__( 'übersprungen', 'rechnungstransfer' ),
+			'skipped'   => '&#9888;&#65039; ' . esc_html__( 'übersprungen', 'rechnungstransfer' ),
+			'duplicate' => '&#128257; ' . esc_html__( 'Duplikat, nicht gesendet', 'rechnungstransfer' ),
 		);
 		?>
 		<table class="widefat striped">
@@ -531,6 +640,12 @@ class Rechnungstransfer_Settings {
 		self::back( $result['ok'], $result['message'] );
 	}
 
+	public static function handle_smtp_test() {
+		self::guard( 'smtp_test' );
+		$result = Rechnungstransfer_Smtp::send_test( wp_get_current_user()->user_email );
+		self::back( $result['ok'], $result['message'] );
+	}
+
 	public static function handle_run() {
 		self::guard( 'run' );
 		$result = Rechnungstransfer_Fetcher::run();
@@ -540,7 +655,7 @@ class Rechnungstransfer_Settings {
 	public static function handle_reset() {
 		self::guard( 'reset' );
 		Rechnungstransfer_Fetcher::reset_state();
-		self::back( true, __( 'Zurückgesetzt. Beim nächsten Abruf werden alle Rechnungs-Mails ab dem Startdatum erneut weitergeleitet.', 'rechnungstransfer' ) );
+		self::back( true, __( 'Zurückgesetzt. Der nächste Abruf prüft alle Mails ab dem Startdatum erneut. Bereits weitergeleitete Rechnungen werden nicht noch einmal gesendet.', 'rechnungstransfer' ) );
 	}
 
 	public static function handle_clear_log() {
