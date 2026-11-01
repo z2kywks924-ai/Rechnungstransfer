@@ -7,7 +7,8 @@ in `rechnungstransfer.php` (Kopfzeile `Version:` und `RECHNUNGSTRANSFER_VERSION`
 ## 1.1.0 – 2026-11-01
 
 - Name „NHZ Rechnungstransfer“
-- Eigener Menüpunkt im Backend mit Logo, Name und Versionsnummer im Seitenkopf
+- Eigener Menüpunkt im Backend mit NHZ-Symbol, Symbol auch als icon.ico (Browser-Tab)
+- NHZ-Systems-Logo, Name und Versionsnummer im Seitenkopf
 - Version auch in der Fußzeile der Plugin-Seite
 
 ## 1.0.0 – 2026-11-01

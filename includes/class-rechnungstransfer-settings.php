@@ -57,6 +57,7 @@ class Rechnungstransfer_Settings {
 			add_action( 'admin_post_rechnungstransfer_' . $action, array( __CLASS__, 'handle_' . $action ) );
 		}
 		add_filter( 'admin_footer_text', array( __CLASS__, 'footer_text' ) );
+		add_action( 'admin_head', array( __CLASS__, 'favicon' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( RECHNUNGSTRANSFER_FILE ), array( __CLASS__, 'action_links' ) );
 	}
 
@@ -183,12 +184,15 @@ class Rechnungstransfer_Settings {
 	}
 
 	/**
-	 * Menü-Symbol: eigenes assets/menu-icon.svg (einfarbig), sonst Dashicon.
+	 * Menü-Symbol: assets/menu-icon.svg (einfarbig) oder menu-icon.png, sonst Dashicon.
 	 */
 	private static function menu_icon() {
 		$icon = RECHNUNGSTRANSFER_DIR . 'assets/menu-icon.svg';
 		if ( file_exists( $icon ) ) {
 			return 'data:image/svg+xml;base64,' . base64_encode( (string) file_get_contents( $icon ) ); // phpcs:ignore
+		}
+		if ( file_exists( RECHNUNGSTRANSFER_DIR . 'assets/menu-icon.png' ) ) {
+			return RECHNUNGSTRANSFER_URL . 'assets/menu-icon.png?ver=' . RECHNUNGSTRANSFER_VERSION;
 		}
 		return 'dashicons-media-spreadsheet';
 	}
@@ -199,9 +203,9 @@ class Rechnungstransfer_Settings {
 	private static function render_header() {
 		$logo = self::logo_url();
 		?>
-		<div style="display:flex;align-items:center;gap:16px;margin:10px 0 16px;">
+		<div style="display:flex;align-items:center;gap:20px;margin:10px 0 16px;">
 			<?php if ( $logo ) : ?>
-				<img src="<?php echo esc_url( $logo ); ?>" alt="NHZ" style="height:56px;width:auto;">
+				<img src="<?php echo esc_url( $logo ); ?>" alt="NHZ-Systems" style="height:96px;width:auto;">
 			<?php else : ?>
 				<span style="display:inline-flex;align-items:center;justify-content:center;height:56px;min-width:56px;padding:0 12px;border-radius:8px;background:#1d2327;color:#fff;font:700 22px/1 sans-serif;letter-spacing:1px;">NHZ</span>
 			<?php endif; ?>
@@ -211,6 +215,18 @@ class Rechnungstransfer_Settings {
 			</div>
 		</div>
 		<?php
+	}
+
+	/**
+	 * NHZ-Symbol (assets/icon.ico) als Browser-Tab-Symbol auf der Plugin-Seite.
+	 */
+	public static function favicon() {
+		// Menü-Symbol (40 px für scharfe Darstellung) auf 20 px begrenzen, auf allen Admin-Seiten.
+		echo '<style>#toplevel_page_' . esc_attr( self::PAGE ) . ' .wp-menu-image img{width:20px;height:20px;padding-top:7px;opacity:1;border-radius:3px}</style>' . "\n";
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( $screen && false !== strpos( (string) $screen->id, self::PAGE ) && file_exists( RECHNUNGSTRANSFER_DIR . 'assets/icon.ico' ) ) {
+			printf( '<link rel="icon" href="%s">' . "\n", esc_url( RECHNUNGSTRANSFER_URL . 'assets/icon.ico?ver=' . RECHNUNGSTRANSFER_VERSION ) );
+		}
 	}
 
 	/**
